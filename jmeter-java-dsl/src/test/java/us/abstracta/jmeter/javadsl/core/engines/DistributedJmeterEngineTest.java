@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import org.apache.jmeter.engine.RemoteJMeterEngineImpl;
 import org.apache.jmeter.rmi.RmiUtils;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,18 +21,25 @@ import us.abstracta.jmeter.javadsl.core.TestPlanStats;
 
 public class DistributedJmeterEngineTest extends JmeterDslTest {
 
+  @BeforeAll
+  public static void setupClass() {
+    System.setProperty("java.rmi.server.hostname", "127.0.0.1");
+    System.setProperty("server.rmi.ssl.keystore.file", "rmi_keystore.jks");
+  }
+
   @Test
   public void shouldGetExpectedCountWhenRunTestInRemoteEngine() throws Exception {
     String keystoreFileName = "rmi_keystore.jks";
     File keystoreResource = testResource(keystoreFileName).file();
     JmeterEnvironment env = new JmeterEnvironment();
     try (TempFileCopy ignored = new TempFileCopy(keystoreResource, new File(keystoreFileName))) {
-      RemoteJMeterEngineImpl.startServer(RmiUtils.getRmiRegistryPort());
+      int rmiPort = RmiUtils.getRmiRegistryPort();
+      RemoteJMeterEngineImpl.startServer(rmiPort);
       TestPlanStats stats = testPlan(
           threadGroup(1, 1,
               httpSampler(wiremockUri)
           )
-      ).runIn(new DistributedJmeterEngine(RmiUtils.getRmiHost().getHostName())
+      ).runIn(new DistributedJmeterEngine("127.0.0.1:" + rmiPort)
           .localJMeterEnv(env)
           .stopEnginesOnTestEnd());
       assertThat(stats.overall().samplesCount()).isEqualTo(1);

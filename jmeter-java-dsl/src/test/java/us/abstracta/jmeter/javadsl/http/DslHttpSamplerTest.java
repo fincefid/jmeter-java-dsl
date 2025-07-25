@@ -644,7 +644,7 @@ public class DslHttpSamplerTest extends JmeterDslTest {
           threadGroup(1, 1,
               httpSampler("http://localhost")
                   .post("{\"name\":\"John\"}", ContentType.APPLICATION_JSON)
-                  .encoding(Charset.forName("UTF-32"))
+                  .encoding(StandardCharsets.UTF_32)
           )
       );
     }
