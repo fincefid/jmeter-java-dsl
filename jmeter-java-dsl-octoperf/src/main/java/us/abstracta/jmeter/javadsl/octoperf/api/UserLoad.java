@@ -9,8 +9,8 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import org.apache.jmeter.threads.ThreadGroup;
 import us.abstracta.jmeter.javadsl.core.threadgroups.BaseThreadGroup.SampleErrorAction;
+import us.abstracta.jmeter.javadsl.core.threadgroups.DslDefaultThreadGroup;
 
 public class UserLoad {
 
@@ -54,36 +54,45 @@ public class UserLoad {
   }
 
   @JsonTypeName("UserLoadRampup")
-  public static class UserLoadRampUp extends UserLoadStrategy {
+  public static class UserLoadRampUp {
 
-    private final int userload;
-    private final long rampup;
-    private final long peak;
-    private final long delay = 0;
-    private final SampleErrorAction onSampleError = SampleErrorAction.CONTINUE;
+    private static final int RAMP_UP_STAGE = 1;
+    private static final int HOLD_FOR_STAGE = 2;
 
-    public UserLoadRampUp() {
-      userload = 0;
-      rampup = 0;
-      peak = 0;
+    private final int count;
+    private final long rampUp;
+    private final long duration;
+
+    public UserLoadRampUp(int count, long rampUp, long duration) {
+      this.count = count;
+      this.rampUp = rampUp;
+      this.duration = duration;
     }
 
-    public UserLoadRampUp(int userLoad, long rampUpMillis, long peakMillis) {
-      this.userload = userLoad;
-      this.rampup = rampUpMillis;
-      this.peak = peakMillis;
+    public static UserLoadRampUp fromThreadGroup(DslDefaultThreadGroup threadGroup) {
+      return new UserLoadRampUp(
+          (Integer) threadGroup.getStages().get(RAMP_UP_STAGE).threadCount(),
+          threadGroup.getStages().get(RAMP_UP_STAGE).duration().toMillis(),
+          threadGroup.getStages().get(HOLD_FOR_STAGE).duration() != null
+              ? threadGroup.getStages().get(HOLD_FOR_STAGE).duration().toMillis()
+              : 0);
     }
 
-    public static UserLoadRampUp fromThreadGroup(ThreadGroup threadGroup) {
-      if (threadGroup == null) {
-        return new UserLoadRampUp(1, 0, 10000);
-      }
-      return new UserLoadRampUp(threadGroup.getNumThreads(),
-          threadGroup.getRampUp() * 1000L,
-          threadGroup.getDuration() != 0 ? threadGroup.getDuration() * 1000L : 10000);
+    public int getCount() {
+      return count;
+    }
+
+    public long getRampUp() {
+      return rampUp;
+    }
+
+    public long getDuration() {
+      return duration;
     }
 
   }
+
+}
 
   public static class SetUpTearDownSettings {
 

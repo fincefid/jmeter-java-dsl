@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.assertj.core.data.Percentage;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import us.abstracta.jmeter.javadsl.JmeterDslTest;
@@ -47,23 +48,31 @@ public class DslWeightedSwitchControllerTest extends JmeterDslTest {
   @Test
   public void shouldHandleRandomChoiceWhenInPlan() throws Exception {
     int threads = 1;
-    int iterations = 20;
+    int iterations = 1000;
     long weight1 = 60;
     long weight2 = 30;
     String label3 = "sample3";
 
     TestPlanStats stats = testPlan(
-            threadGroup(threads, iterations,
-                    weightedSwitchController()
-                            .child(weight1, httpSampler(SAMPLE_1_LABEL, wiremockUri))
-                            .children(httpSampler(SAMPLE_2_LABEL, wiremockUri))
-                            .child(weight2, httpSampler(label3, wiremockUri))
-                            .randomChoice(true)
-            )
+        threadGroup(threads, iterations,
+            weightedSwitchController()
+                .child(weight1, httpSampler(SAMPLE_1_LABEL, wiremockUri))
+                .children(httpSampler(SAMPLE_2_LABEL, wiremockUri))
+                .child(weight2, httpSampler(label3, wiremockUri))
+                .randomChoice(true)
+        )
     ).run();
 
-    Map<String, Long> sampleCounts = buildSampleCountsMap(stats);
-    assertThat(sampleCounts.keySet()).containsExactlyInAnyOrder(SAMPLE_1_LABEL, SAMPLE_2_LABEL, label3);
+    Map<String, Long> expectedSampleCounts = buildExpectedSamplesCounts(threads * iterations,
+        new WeightedLabel(SAMPLE_1_LABEL, weight1),
+        new WeightedLabel(SAMPLE_2_LABEL, DslWeightedSwitchController.DEFAULT_WEIGHT),
+        new WeightedLabel(label3, weight2));
+    Map<String, Long> actualSampleCounts = buildSampleCountsMap(stats);
+    assertThat(actualSampleCounts.keySet()).isEqualTo(expectedSampleCounts.keySet());
+    for (String label : actualSampleCounts.keySet()) {
+      assertThat(actualSampleCounts.get(label))
+          .isCloseTo(expectedSampleCounts.get(label), Percentage.withPercentage(25));
+    }
   }
 
 

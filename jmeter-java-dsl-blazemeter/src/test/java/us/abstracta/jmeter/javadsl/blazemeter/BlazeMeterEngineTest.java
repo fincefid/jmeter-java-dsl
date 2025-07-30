@@ -9,10 +9,12 @@ import static us.abstracta.jmeter.javadsl.JmeterDsl.threadGroup;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import us.abstracta.jmeter.javadsl.core.TestPlanStats;
 import us.abstracta.jmeter.javadsl.util.TestResource;
 
+@Disabled("Requires BZ_TOKEN environment variable to be set")
 public class BlazeMeterEngineTest {
 
   private static final String SAMPLE_LABEL = "httpSample";

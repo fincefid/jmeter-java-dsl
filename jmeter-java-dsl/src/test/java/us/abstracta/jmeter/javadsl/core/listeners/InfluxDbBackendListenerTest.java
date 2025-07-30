@@ -25,6 +25,8 @@ import us.abstracta.jmeter.javadsl.JmeterDslTest;
 import us.abstracta.jmeter.javadsl.codegeneration.MethodCallBuilderTest;
 import us.abstracta.jmeter.javadsl.core.DslTestPlan;
 
+import org.junit.jupiter.api.Test;
+
 public class InfluxDbBackendListenerTest extends JmeterDslTest {
 
   private static final Logger LOG = LoggerFactory.getLogger(JmeterDslTest.class);

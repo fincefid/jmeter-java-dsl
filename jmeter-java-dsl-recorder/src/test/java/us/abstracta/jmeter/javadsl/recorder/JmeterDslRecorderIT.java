@@ -17,7 +17,9 @@ import us.abstracta.jmeter.javadsl.codegeneration.TestClassTemplate;
 import us.abstracta.jmeter.javadsl.core.StringTemplateAssert;
 import us.abstracta.jmeter.javadsl.recorder.correlations.CorrelationRuleBuilder;
 import us.abstracta.jmeter.javadsl.util.TestResource;
+import org.junit.jupiter.api.Disabled;
 
+@Disabled("Requires browser and chromedriver to be installed")
 public class JmeterDslRecorderIT {
 
   @BeforeAll

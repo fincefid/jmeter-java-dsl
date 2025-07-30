@@ -12,12 +12,13 @@ import java.util.Set;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import org.apache.jorphan.collections.HashTree;
-import org.jetbrains.annotations.NotNull;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import us.abstracta.jmeter.javadsl.core.BuildTreeContext;
-import us.abstracta.jmeter.javadsl.core.DslJmeterEngine;
-import us.abstracta.jmeter.javadsl.engines.BaseRemoteEngine;
+import us.abstracta.jmeter.javadsl.core.DslTestPlan;
+
+import us.abstracta.jmeter.javadsl.core.engines.BaseRemoteEngine;
+import us.abstracta.jmeter.javadsl.core.threadgroups.DslDefaultThreadGroup;
 import us.abstracta.jmeter.javadsl.octoperf.api.BenchReport;
 import us.abstracta.jmeter.javadsl.octoperf.api.BenchReport.BenchReportItem;
 import us.abstracta.jmeter.javadsl.octoperf.api.BenchReport.ReportItemMetric;
@@ -41,7 +42,7 @@ import us.abstracta.jmeter.javadsl.octoperf.api.Workspace;
  *
  * @since 0.58
  */
-public class OctoPerfEngine extends BaseRemoteEngine<OctoPerfClient, OctoPerfTestPlanStats> {
+public class OctoPerfEngine extends BaseRemoteEngine {
 
   private static final Logger LOG = LoggerFactory.getLogger(OctoPerfEngine.class);
   private static final String TAG = "jmeter-java-dsl";
@@ -56,6 +57,7 @@ public class OctoPerfEngine extends BaseRemoteEngine<OctoPerfClient, OctoPerfTes
   private Duration holdFor = null;
   private Duration testTimeout = Duration.ofHours(1);
   private boolean projectCleanUp = true;
+  private OctoPerfClient octoPerfClient;
 
   /**
    * @param apiKey is the authentication token to be used to access OctoPerf API.
@@ -188,41 +190,46 @@ public class OctoPerfEngine extends BaseRemoteEngine<OctoPerfClient, OctoPerfTes
     return this;
   }
 
-  @Override
-  public OctoPerfTestPlanStats run(File jmxFile, HashTree tree, BuildTreeContext context)
+  protected OctoPerfTestPlanStats run(DslTestPlan testPlan, HashTree tree, BuildTreeContext context)
       throws IOException, InterruptedException, TimeoutException {
-    User user = apiClient.findCurrentUser();
-    Project project = findProject(user);
-    if (projectCleanUp) {
-      cleanUpProject(project, apiClient);
+    File jmxFile = File.createTempFile("jmeter-java-dsl", ".jmx");
+    try {
+      testPlan.saveAsJmx(jmxFile.getAbsolutePath());
+      octoPerfClient = new OctoPerfClient(apiKey);
+      try {
+        User user = octoPerfClient.findCurrentUser();
+        Project project = findProject(user);
+        if (projectCleanUp) {
+          cleanUpProject(project, octoPerfClient);
+        }
+        LOG.info("Importing JMX file into project...");
+        List<VirtualUser> vus = octoPerfClient.importJmx(project, jmxFile);
+        vus.forEach(vu -> LOG.info("Created virtual user {}", vu.getUrl()));
+        tagVirtualUsers(vus);
+        Scenario scenario = buildScenario(user, project, vus, testPlan);
+        BenchReport report = octoPerfClient.runScenario(scenario);
+        LOG.info("Running scenario in {}", report.getUrl());
+        Instant testStart = Instant.now();
+        BenchResult result = awaitTestEnd(report, testStart);
+        return findTestPlanStats(report, testStart, vus, result);
+      } finally {
+        octoPerfClient.close();
+      }
+    } finally {
+      jmxFile.delete();
     }
-    LOG.info("Importing JMX file into project...");
-    List<VirtualUser> vus = apiClient.importJmx(project, jmxFile);
-    vus.forEach(vu -> LOG.info("Created virtual user {}", vu.getUrl()));
-    tagVirtualUsers(vus);
-    Scenario scenario = buildScenario(user, project, vus, tree);
-    BenchReport report = apiClient.runScenario(scenario);
-    LOG.info("Running scenario in {}", report.getUrl());
-    Instant testStart = Instant.now();
-    BenchResult result = awaitTestEnd(report, testStart);
-    return findTestPlanStats(report, testStart, vus, result);
-  }
-
-  @Override
-  protected OctoPerfClient buildClient() {
-    return new OctoPerfClient(apiKey);
   }
 
   private Project findProject(User user) throws IOException {
     LOG.info("Looking up project with name '{}'...", projectName);
-    Workspace workspace = apiClient.findDefaultWorkspace();
-    Optional<Project> foundProject = apiClient.findProjectByWorkspaceAndName(workspace,
+    Workspace workspace = octoPerfClient.findDefaultWorkspace();
+    Optional<Project> foundProject = octoPerfClient.findProjectByWorkspaceAndName(workspace,
         projectName);
     if (foundProject.isPresent()) {
       LOG.info("Found project {}", foundProject.get().getUrl());
       return foundProject.get();
     } else {
-      Project ret = apiClient.createProject(new Project(user, workspace, projectName, TAGS));
+      Project ret = octoPerfClient.createProject(new Project(user, workspace, projectName, TAGS));
       LOG.info("Created project {}", ret.getUrl());
       return ret;
     }
@@ -256,31 +263,37 @@ public class OctoPerfEngine extends BaseRemoteEngine<OctoPerfClient, OctoPerfTes
   private void tagVirtualUsers(List<VirtualUser> vus) throws IOException {
     for (VirtualUser vu : vus) {
       vu.getTags().add(TAG);
-      apiClient.updateVirtualUser(vu);
+      octoPerfClient.updateVirtualUser(vu);
     }
   }
 
   private Scenario buildScenario(User user, Project project, List<VirtualUser> vus,
-      HashTree tree) throws IOException {
-    Provider provider = apiClient.findProviderByWorkspace(project.getWorkspace());
+      DslTestPlan testPlan) throws IOException {
+    Provider provider = octoPerfClient.findProviderByWorkspace(project.getWorkspace());
     String defaultRegion = provider.getRegions().keySet().iterator().next();
     List<UserLoad> userLoads = vus.stream()
         .map(vu -> new UserLoad(vu.getId(), provider.getId(), defaultRegion,
-            buildUserLoadConfig(tree)))
+            buildUserLoadConfig(testPlan)))
         .collect(Collectors.toList());
-    Scenario ret = apiClient.createScenario(
+    Scenario ret = octoPerfClient.createScenario(
         new Scenario(user, project, projectName, userLoads, TAGS));
     LOG.info("Created scenario {}", ret.getUrl());
     return ret;
   }
 
-  @NotNull
-  private UserLoadRampUp buildUserLoadConfig(HashTree tree) {
-    return (totalUsers == null && rampUp == null && holdFor == null)
-        ? UserLoadRampUp.fromThreadGroup(extractFirstThreadGroup(tree))
-        : new UserLoadRampUp(totalUsers != null ? totalUsers : 1,
-            rampUp != null ? rampUp.toMillis() : 0,
-            holdFor != null ? holdFor.toMillis() : 10000);
+  private UserLoadRampUp buildUserLoadConfig(DslTestPlan testPlan) {
+    if (totalUsers == null && rampUp == null && holdFor == null) {
+      return UserLoadRampUp.fromThreadGroup(testPlan.getChildren().stream()
+          .filter(c -> c instanceof DslDefaultThreadGroup)
+          .map(c -> (DslDefaultThreadGroup) c)
+          .findFirst()
+          .orElseThrow(() -> new IllegalStateException(
+              "No thread group found in test plan. At least one is required.")));
+    } else {
+      return new UserLoadRampUp(totalUsers != null ? totalUsers : 1,
+          rampUp != null ? rampUp.toMillis() : 0,
+          holdFor != null ? holdFor.toMillis() : 10000);
+    }
   }
 
   private BenchResult awaitTestEnd(BenchReport report, Instant testStart)
@@ -290,7 +303,7 @@ public class OctoPerfEngine extends BaseRemoteEngine<OctoPerfClient, OctoPerfTes
     State status = State.CREATED;
     do {
       Thread.sleep(STATUS_POLL_PERIOD.toMillis());
-      result = apiClient.findBenchResult(resultId);
+      result = octoPerfClient.findBenchResult(resultId);
       if (!status.equals(result.getState())) {
         LOG.debug("Test run {} status changed to: {}", report.getUrl(), result.getState());
         status = result.getState();
@@ -330,21 +343,12 @@ public class OctoPerfEngine extends BaseRemoteEngine<OctoPerfClient, OctoPerfTes
     SummaryReportItem summaryReport = findReportItemWithType(SummaryReportItem.class,
         report.getItems());
     setReportMetrics(summaryReport, metrics);
-    double[] summaryStats = apiClient.findSummaryStats(summaryReport);
+    double[] summaryStats = octoPerfClient.findSummaryStats(summaryReport);
     double[] prevStats;
-    /*
-     since OctoPerf statistics are processed asynchronously, they may not be yet fully updated
-     when tests result is marked as finished and since there is no indicator either when statistics
-     are completely updated, we poll until we don't see further changes in statistics which is an
-     indicator that statistics are highly probably complete. Explored alternatives included using
-     jtl files and jmeter logs, but there is a limit of 1GB disk space in OctoPerf load generators
-     and jtl and jmeter logs may as well be incomplete, with the additional performance penalty of
-     handling such files.
-     */
     do {
       Thread.sleep(STATISTICS_POLL_PERIOD.toMillis());
       prevStats = summaryStats;
-      summaryStats = apiClient.findSummaryStats(summaryReport);
+      summaryStats = octoPerfClient.findSummaryStats(summaryReport);
     } while (!Arrays.equals(summaryStats, prevStats) && !hasTimedOut(testTimeout, testStart));
     if (hasTimedOut(testTimeout, testStart)) {
       throw buildTestTimeoutException(report);
@@ -352,7 +356,7 @@ public class OctoPerfEngine extends BaseRemoteEngine<OctoPerfClient, OctoPerfTes
     StatisticTableReportItem tableReport = findReportItemWithType(StatisticTableReportItem.class,
         report.getItems());
     setReportMetrics(tableReport, metrics);
-    List<TableEntry> tableStats = apiClient.findTableStats(tableReport);
+    List<TableEntry> tableStats = octoPerfClient.findTableStats(tableReport);
     return new OctoPerfTestPlanStats(summaryStats, tableStats, vus, result);
   }
 

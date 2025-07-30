@@ -99,6 +99,11 @@
         <artifactId>jackson-databind</artifactId>
         <version>${jackson.version}</version>
       </dependency>
+      <dependency>
+        <groupId>us.abstracta.jmeter</groupId>
+        <artifactId>jmeter-java-dsl</artifactId>
+        <version>${project.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -228,6 +233,7 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
+          <argLine>--add-opens java.base/java.lang=ALL-UNNAMED</argLine>
           <trimStackTrace>false</trimStackTrace>
           <!-- use cacio-tta to avoid GUI in swing tests -->
           <systemPropertyVariables>

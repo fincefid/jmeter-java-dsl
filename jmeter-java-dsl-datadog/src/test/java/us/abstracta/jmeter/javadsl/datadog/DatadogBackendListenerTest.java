@@ -14,8 +14,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import us.abstracta.jmeter.javadsl.codegeneration.MethodCallBuilderTest;
 import us.abstracta.jmeter.javadsl.core.DslTestPlan;
+import org.junit.jupiter.api.Disabled;
 import us.abstracta.jmeter.javadsl.datadog.DatadogBackendListener.DatadogSite;
 
+@Disabled("Requires DATADOG_API_KEY environment variable to be set")
 public class DatadogBackendListenerTest {
 
   private static final String TAG = "app:jmeter-java-dsl";

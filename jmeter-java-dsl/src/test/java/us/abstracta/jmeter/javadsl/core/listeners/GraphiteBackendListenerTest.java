@@ -39,6 +39,8 @@ import us.abstracta.jmeter.javadsl.JmeterDslTest;
 import us.abstracta.jmeter.javadsl.codegeneration.MethodCallBuilderTest;
 import us.abstracta.jmeter.javadsl.core.DslTestPlan;
 
+import org.junit.jupiter.api.Test;
+
 public class GraphiteBackendListenerTest extends JmeterDslTest {
 
   private static final int GRAPHITE_RECEIVER_PORT = 2004;

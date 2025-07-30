@@ -41,8 +41,10 @@ public class Jmx2DslIT {
       StringBuilder builder = new StringBuilder();
       String line;
       while ((line = reader.readLine()) != null) {
-        builder.append(line);
-        builder.append(System.getProperty("line.separator"));
+        if (!line.contains("sun.misc.Unsafe") && !line.contains("WARNING: Please consider reporting this to the maintainers of class com.thoughtworks.xstream.converters.reflection.SunUnsafeReflectionProvider")) {
+          builder.append(line);
+          builder.append(System.getProperty("line.separator"));
+        }
       }
       return builder.toString();
     }

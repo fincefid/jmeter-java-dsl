@@ -8,10 +8,13 @@ import static us.abstracta.jmeter.javadsl.JmeterDsl.threadGroup;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import us.abstracta.jmeter.javadsl.core.TestPlanStats;
+import us.abstracta.jmeter.javadsl.core.JmeterDslTest;
 
-public class OctoPerfEngineTest {
+@Disabled("Requires OCTOPERF_API_TOKEN environment variable to be set")
+public class OctoPerfEngineTest extends JmeterDslTest {
 
   @Test
   public void shouldRunTestInOctoPerf() throws Exception {
